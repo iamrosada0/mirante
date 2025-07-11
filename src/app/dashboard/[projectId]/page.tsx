@@ -9,6 +9,7 @@ import { CommentSection } from "@/components/CommentSection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Project } from "@/types/project";
 import { use } from "react";
+import { Button } from "@/components/ui/button";
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;
@@ -77,6 +78,11 @@ export default function ProjectPage({ params }: ProjectPageProps) {
 
   return (
     <div className="container mx-auto p-4">
+      <div className="mb-4">
+        <Button onClick={() => router.push("/dashboard")}>
+          ← Voltar ao Dashboard
+        </Button>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>{project.title}</CardTitle>
