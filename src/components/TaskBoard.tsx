@@ -195,6 +195,54 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
   }, [projectId]);
 
   // Handler for when a drag operation ends
+  // const onDragEnd = async (event: DragEndEvent) => {
+  //   const { active, over } = event;
+
+  //   if (!over) {
+  //     console.log("Task dropped outside any valid column.");
+  //     return;
+  //   }
+
+  //   const activeTaskId = String(active.id);
+  //   // CRITICAL: Ensure `over.id` refers to the column's status, not a task ID.
+  //   // By using `useDroppable` on the column, `over.id` will correctly be the column's ID.
+  //   const newStatus = String(over.id);
+
+  //   const taskBeingDragged = tasks.find((task) => task.id === activeTaskId);
+
+  //   if (taskBeingDragged) {
+  //     if (taskBeingDragged.status !== newStatus) {
+  //       console.log(
+  //         `Attempting to move task "${taskBeingDragged.title}" (ID: ${activeTaskId}) from "${taskBeingDragged.status}" to "${newStatus}"`
+  //       );
+  //       try {
+  //         await updateDoc(doc(db, "tasks", taskBeingDragged.id), {
+  //           status: newStatus,
+  //         });
+  //         console.log(
+  //           `Successfully updated task ID ${activeTaskId} to status: ${newStatus}`
+  //         );
+  //       } catch (err: unknown) {
+  //         console.error("Error updating task status in Firestore:", err);
+  //         setError(
+  //           err instanceof Error
+  //             ? `Failed to update task status: ${err.message}`
+  //             : "Failed to update task status. Please try again."
+  //         );
+  //       }
+  //     } else {
+  //       console.log(
+  //         `Task "${taskBeingDragged.title}" dropped within its original column (${newStatus}). No status change.`
+  //       );
+  //     }
+  //   } else {
+  //     console.warn(
+  //       `Dragged task with ID ${activeTaskId} not found in the current state. This might indicate a data sync issue.`
+  //     );
+  //   }
+  // };
+  // ... (inside TaskBoard component)
+
   const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -204,9 +252,18 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
     }
 
     const activeTaskId = String(active.id);
-    // CRITICAL: Ensure `over.id` refers to the column's status, not a task ID.
-    // By using `useDroppable` on the column, `over.id` will correctly be the column's ID.
     const newStatus = String(over.id);
+
+    // Define your valid statuses
+    const validStatuses = ["pending", "in-progress", "completed"];
+
+    // *** NEW: Check if the newStatus is a valid column status ***
+    if (!validStatuses.includes(newStatus)) {
+      console.warn(
+        `Dropped on an invalid target ID: ${newStatus}. Not updating task status.`
+      );
+      return; // Exit if the target is not a recognized column
+    }
 
     const taskBeingDragged = tasks.find((task) => task.id === activeTaskId);
 
@@ -241,7 +298,6 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
       );
     }
   };
-
   // --- Render Logic ---
 
   if (isLoading) {
