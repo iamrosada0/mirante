@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect } from "react";
-import { User, onAuthStateChanged } from "firebase/auth";
+import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -35,6 +37,7 @@ export default function Dashboard() {
   } | null>(null);
   const [userLoading, setUserLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const { projects, loading: projectsLoading } = useProjects();
   const router = useRouter();
 
@@ -84,6 +87,19 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [router]);
 
+  // Handle logout
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    setError("");
+    try {
+      await signOut(auth);
+      router.push("/auth/login");
+    } catch (err: unknown) {
+      setError(getFriendlyErrorMessage(err));
+      setIsSigningOut(false);
+    }
+  };
+
   if (userLoading || projectsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -103,21 +119,37 @@ export default function Dashboard() {
   return (
     <div className="container mx-auto p-4">
       <Card className="mb-6">
-        <CardContent className="flex items-center space-x-4 pt-6">
-          <Avatar>
-            <AvatarImage src={userData?.photoURL || ""} alt="User avatar" />
-            <AvatarFallback>
-              {userData?.displayName?.charAt(0) ||
-                userData?.email?.charAt(0) ||
-                "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h2 className="text-lg font-semibold">
-              Welcome, {userData?.displayName || "User"}
-            </h2>
-            <p className="text-sm text-muted-foreground">{userData?.email}</p>
+        <CardContent className="flex items-center justify-between space-x-4 pt-6">
+          <div className="flex items-center space-x-4">
+            <Avatar>
+              <AvatarImage src={userData?.photoURL || ""} alt="User avatar" />
+              <AvatarFallback>
+                {userData?.displayName?.charAt(0) ||
+                  userData?.email?.charAt(0) ||
+                  "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h2 className="text-lg font-semibold">
+                Welcome, {userData?.displayName || "User"}
+              </h2>
+              <p className="text-sm text-muted-foreground">{userData?.email}</p>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+          >
+            {isSigningOut ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing Out...
+              </>
+            ) : (
+              "Sign Out"
+            )}
+          </Button>
         </CardContent>
       </Card>
       <Card>
