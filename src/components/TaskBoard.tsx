@@ -1,145 +1,215 @@
 "use client";
 import { useState, useEffect } from "react";
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  DropResult,
-} from "react-beautiful-dnd";
-import {
-  collection,
-  onSnapshot,
-  updateDoc,
-  doc,
-  query,
-  where,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Task } from "@/types/task";
+import { addDoc, collection, doc, getDoc } from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
+import { User, onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
-interface TaskBoardProps {
-  projectId: string;
+interface NewTaskProps {
+  projectId?: string; // Optional prop to support direct usage
 }
 
-export function TaskBoard({ projectId }: TaskBoardProps) {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [error, setError] = useState<string | null>(null);
+const getFriendlyErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    const code = (error as { code?: string }).code;
+    switch (code) {
+      case "auth/network-request-failed":
+        return "Network error. Please check your connection and try again.";
+      default:
+        return error.message || "An unexpected error occurred.";
+    }
+  }
+  return "An unexpected error occurred.";
+};
 
+export default function NewTask({
+  projectId: propProjectId,
+}: NewTaskProps = {}) {
+  const [open, setOpen] = useState(true);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+  const [titleError, setTitleError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryProjectId = searchParams.get("projectId");
+  const projectId = propProjectId || queryProjectId; // Prefer prop, fallback to query
+
+  // Verify user is logged in and exists in Firestore
   useEffect(() => {
-    // Use a Firestore query to filter tasks by projectId on the server side
-    const tasksQuery = query(
-      collection(db, "tasks"),
-      where("projectId", "==", projectId)
-    );
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (currentUser: User | null) => {
+        setUserLoading(true);
+        setError("");
 
-    const unsubscribe = onSnapshot(
-      tasksQuery,
-      (snapshot) => {
-        try {
-          const taskData = snapshot.docs.map(
-            (doc) =>
-              ({
-                id: doc.id,
-                ...doc.data(),
-              } as Task)
-          );
-          setTasks(taskData);
-          setError(null);
-        } catch (err) {
-          console.error("Error processing Firestore snapshot:", err);
-          setError("Failed to load tasks.");
+        if (!currentUser) {
+          setError("No user is logged in. Redirecting to login...");
+          setTimeout(() => router.push("/auth/login"), 2000);
+          setUserLoading(false);
+          return;
         }
-      },
-      (err) => {
-        console.error("Firestore subscription error:", err);
-        setError("Failed to subscribe to tasks.");
+
+        try {
+          const userDocRef = doc(db, "users", currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+
+          if (!userDoc.exists()) {
+            await auth.signOut();
+            setError("User not found in database. Please register first.");
+            setTimeout(() => router.push("/auth/register"), 2000);
+            setUserLoading(false);
+            return;
+          }
+
+          setUser(currentUser);
+        } catch (err: unknown) {
+          setError(getFriendlyErrorMessage(err));
+          setTimeout(() => router.push("/auth/login"), 2000);
+        } finally {
+          setUserLoading(false);
+        }
       }
     );
 
     return () => unsubscribe();
-  }, [projectId]);
+  }, [router]);
 
-  const onDragEnd = async (result: DropResult) => {
-    const { source, destination, draggableId } = result;
+  // Validate and submit form
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setTitleError("");
 
-    if (!destination) return; // No destination, nothing to do
+    // Validate inputs
+    if (!title.trim()) {
+      setTitleError("Task title is required.");
+      return;
+    }
+    if (title.length > 100) {
+      setTitleError("Task title must be 100 characters or less.");
+      return;
+    }
+    if (description.length > 500) {
+      setError("Description must be 500 characters or less.");
+      return;
+    }
+    if (!projectId) {
+      setError("Invalid project ID. Please select a project.");
+      return;
+    }
 
-    if (source.droppableId !== destination.droppableId) {
-      const task = tasks.find((t) => t.id === draggableId);
-      if (task) {
-        try {
-          await updateDoc(doc(db, "tasks", task.id), {
-            status: destination.droppableId,
-          });
-        } catch (err) {
-          console.error("Error updating task status:", err);
-          setError("Failed to update task status.");
-        }
-      }
+    if (!user) {
+      setError("No user is logged in.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, "tasks"), {
+        title: title.trim(),
+        description: description.trim(),
+        projectId, // Use prop or query parameter
+        status: "pending",
+        createdBy: user.uid,
+        createdAt: serverTimestamp(),
+      });
+      setOpen(false);
+      setTimeout(() => router.push(`/dashboard/${projectId}`), 100);
+    } catch (err: unknown) {
+      setError(getFriendlyErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Tasks</h2>
-        <Link href={`/dashboard/tasks/new?projectId=${projectId}`}>
-          <Button>Add Task</Button>
-        </Link>
+  if (userLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {["pending", "in-progress", "completed"].map((status) => (
-            <Droppable key={status} droppableId={status}>
-              {(provided) => (
-                <Card
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="min-h-[200px]"
-                >
-                  <CardHeader>
-                    <CardTitle>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {tasks
-                      .filter((task) => task.status === status)
-                      .map((task, index) => (
-                        <Draggable
-                          key={task.id}
-                          draggableId={task.id}
-                          index={index}
-                        >
-                          {(provided) => (
-                            <Card
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className="mb-2 p-4"
-                            >
-                              <CardContent className="p-0">
-                                <p className="font-medium">{task.title}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {task.description || "No description"}
-                                </p>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </Draggable>
-                      ))}
-                    {provided.placeholder}
-                  </CardContent>
-                </Card>
-              )}
-            </Droppable>
-          ))}
-        </div>
-      </DragDropContext>
-    </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(open) =>
+        !open && setTimeout(() => router.push(`/dashboard/${projectId}`), 100)
+      }
+    >
+      <DialogTrigger asChild>
+        <Button className="hidden">Add Task</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New Task</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">Task Title</Label>
+            <Input
+              id="title"
+              placeholder="Task Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              aria-invalid={!!titleError}
+              aria-describedby={titleError ? "title-error" : undefined}
+              disabled={isSubmitting}
+            />
+            {titleError && (
+              <p id="title-error" className="text-red-500 text-sm">
+                {titleError}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              placeholder="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
