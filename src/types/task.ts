@@ -1,10 +1,11 @@
 export interface Task {
   id: string;
-  projectId: string;
   title: string;
-  description: string;
-  assignee: string;
-  status: "pending" | "in-progress" | "completed" | "delayed";
-  dueDate?: Date;
-  priority: number;
+  description?: string;
+  status: "pending" | "in-progress" | "completed";
+  projectId: string;
+  createdAt: Date;
+  createdBy?: string;
+  assignee?: string; // Tornar opcional
+  priority?: string; // Tornar opcional (ou o tipo correto, ex.: "low" | "medium" | "high")
 }
