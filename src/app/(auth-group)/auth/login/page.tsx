@@ -1,53 +1,63 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState } from "react";
-import {
-  signInWithEmailAndPassword,
-  GoogleAuthProvider, // Import GoogleAuthProvider
-  signInWithPopup, // Import signInWithPopup
-} from "firebase/auth";
-import { auth } from "@/lib/firebase"; // Your Firebase auth instance
+import { GoogleAuthProvider, signInWithPopup, User } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+
+// Map Firebase error codes to user-friendly messages
+const getFriendlyErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    const code = (error as any).code;
+    switch (code) {
+      case "auth/popup-closed-by-user":
+        return "Google sign-in was canceled.";
+      case "auth/network-request-failed":
+        return "Network error. Please check your connection and try again.";
+      case "auth/popup-blocked":
+        return "Popup blocked by browser. Please allow popups and try again.";
+      default:
+        return error.message || "An unexpected error occurred.";
+    }
+  }
+  return "An unexpected error occurred.";
+};
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // Handle email/password login
-  const handleEmailPasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(""); // Clear previous errors
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unexpected error occurred during email/password login.");
-      }
-    }
-  };
-
-  // Handle Google Sign-In
+  // Handle Google Sign-In with user existence check
   const handleGoogleLogin = async () => {
-    setError(""); // Clear previous errors
+    setError("");
+    setIsLoading(true);
     try {
-      const provider = new GoogleAuthProvider(); // Create a new Google Auth Provider
-      await signInWithPopup(auth, provider); // Use signInWithPopup for Google
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const user: User = userCredential.user; // Explicitly use User type
+
+      // Check if user exists in Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        // Sign out the user if they don't exist in Firestore
+        await auth.signOut();
+        setError("User not found. Please register first.");
+        return;
+      }
+
       router.push("/dashboard");
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        // Handle specific Google Auth errors if needed, e.g., 'auth/popup-closed-by-user'
-        setError(err.message);
-      } else {
-        setError("An unexpected error occurred during Google sign-in.");
-      }
+      setError(getFriendlyErrorMessage(err));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -57,40 +67,32 @@ export default function Login() {
         <CardHeader>
           <CardTitle>Login</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleEmailPasswordLogin} className="space-y-4">
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <Button type="submit" className="w-full">
-              Sign In (Email)
-            </Button>
-            {/* New Button for Google Sign-In */}
-            <Button
-              type="button" // Important: set type to "button" to prevent form submission
-              onClick={handleGoogleLogin}
-              className="w-full mt-2"
-              variant="outline"
+        <CardContent className="space-y-4">
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <Button
+            type="button"
+            onClick={handleGoogleLogin}
+            className="w-full"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing In...
+              </>
+            ) : (
+              "Sign In with Google"
+            )}
+          </Button>
+          <p className="text-sm text-center">
+            Don&apos;t have an account?{" "}
+            <Link
+              href="/auth/register"
+              className="text-primary hover:underline"
             >
-              Sign In with Google
-            </Button>
-            <p className="text-sm text-center">
-              Don&apos;t have an account?{" "}
-              <Link href="/auth/register" className="text-primary">
-                Register
-              </Link>
-            </p>
-          </form>
+              Register
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>
