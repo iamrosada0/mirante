@@ -1,6 +1,5 @@
-import { z } from "zod"; // Import Zod
+import { z } from "zod";
 
-// Define Zod schema for task validation
 export const taskSchema = z.object({
   title: z
     .string()
