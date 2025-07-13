@@ -8,9 +8,9 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { taskSchema } from "@/lib/zodSchemas";
+import { User } from "@/types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useCreateTask(projectId: string | null, user: any) {
+export function useCreateTask(projectId: string | null, user: User) {
   const createTask = async ({
     title,
     description,

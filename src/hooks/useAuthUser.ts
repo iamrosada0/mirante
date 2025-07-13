@@ -7,7 +7,21 @@ import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { getFriendlyErrorMessage } from "@/lib/firebaseErrors";
 
-export function useAuthUser() {
+interface UseAuthUserOptions {
+  createdBy?: string;
+  redirectToLogin?: () => void;
+  redirectToRegister?: () => void;
+  autoRedirect?: boolean; // default true
+}
+
+export function useAuthUser(options: UseAuthUserOptions = {}) {
+  const {
+    createdBy,
+    redirectToLogin,
+    redirectToRegister,
+    autoRedirect = true,
+  } = options;
+
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<{
     displayName: string | null;
@@ -24,8 +38,13 @@ export function useAuthUser() {
       setError("");
 
       if (!currentUser) {
-        setError("Nenhum usuário logado. Redirecionando...");
-        setTimeout(() => router.push("/auth/login"), 2000);
+        const msg = "Nenhum usuário logado.";
+        setError(msg);
+        if (autoRedirect && redirectToLogin) {
+          setTimeout(redirectToLogin, 2000);
+        } else if (autoRedirect) {
+          setTimeout(() => router.push("/auth/login"), 2000);
+        }
         return;
       }
 
@@ -35,8 +54,18 @@ export function useAuthUser() {
 
         if (!userDoc.exists()) {
           await auth.signOut();
-          setError("Usuário não encontrado. Registre-se primeiro.");
-          setTimeout(() => router.push("/auth/register"), 2000);
+          const msg = "Usuário não encontrado. Registre-se primeiro.";
+          setError(msg);
+          if (autoRedirect && redirectToRegister) {
+            setTimeout(redirectToRegister, 2000);
+          } else if (autoRedirect) {
+            setTimeout(() => router.push("/auth/register"), 2000);
+          }
+          return;
+        }
+
+        if (createdBy && currentUser.uid !== createdBy) {
+          setError("Somente o criador da tarefa pode editá-la.");
           return;
         }
 
@@ -46,18 +75,20 @@ export function useAuthUser() {
           email: currentUser.email,
           photoURL: currentUser.photoURL,
         });
-      } catch (err) {
+      } catch (err: unknown) {
         const message = getFriendlyErrorMessage(err);
         setError(message);
-        toast.error(message);
-        setTimeout(() => router.push("/auth/login"), 2000);
+        if (autoRedirect) {
+          toast.error(message);
+          setTimeout(() => router.push("/auth/login"), 2000);
+        }
       } finally {
         setUserLoading(false);
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [createdBy, redirectToLogin, redirectToRegister, autoRedirect, router]);
 
   const signOutUser = async () => {
     try {
@@ -65,9 +96,16 @@ export function useAuthUser() {
       router.push("/auth/login");
     } catch (err) {
       const message = getFriendlyErrorMessage(err);
+      setError(message);
       toast.error(message);
     }
   };
 
-  return { user, userData, userLoading, error, signOutUser };
+  return {
+    user,
+    userData,
+    userLoading,
+    error,
+    signOutUser,
+  };
 }
