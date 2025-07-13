@@ -10,6 +10,7 @@ import {
   getDoc,
   addDoc,
   serverTimestamp,
+  Timestamp,
   deleteDoc,
 } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
@@ -24,6 +25,10 @@ import {
   closestCorners,
   DragEndEvent,
   useDroppable,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -32,7 +37,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { TaskAssignee } from "@/components/TaskAssignee";
-import { CommentSection } from "@/components/CommentSection";
 import { Notifications } from "@/components/Notifications";
 import { EditTask } from "@/components/EditTask";
 import {
@@ -63,7 +67,6 @@ function DraggableTask({ task }: DraggableTaskProps) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
-  // Get current user
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setCurrentUserId(user ? user.uid : null);
@@ -100,7 +103,6 @@ function DraggableTask({ task }: DraggableTaskProps) {
         const projectData = projectDoc.data();
         const memberUids = projectData?.members || [];
 
-        // Notify project members about deletion
         for (const memberId of memberUids) {
           if (memberId !== currentUserId) {
             await addDoc(collection(db, "notifications"), {
@@ -133,7 +135,7 @@ function DraggableTask({ task }: DraggableTaskProps) {
       <CardContent className="p-0">
         <div className="flex justify-between items-center mb-2">
           <p className="font-medium text-gray-800 text-base">{task.title}</p>
-          {currentUserId === task.createdBy && (
+          {currentUserId && currentUserId === task.createdBy && (
             <Select onValueChange={handleAction}>
               <SelectTrigger className="w-[120px]">
                 <SelectValue placeholder="Actions" />
@@ -154,7 +156,7 @@ function DraggableTask({ task }: DraggableTaskProps) {
         <p className="text-sm text-muted-foreground mt-1">
           Priority: {task.priority || "Medium"}
         </p>
-        {task.dueDate && (
+        {task.dueDate instanceof Date && (
           <p className="text-sm text-muted-foreground mt-1">
             Due: {task.dueDate.toLocaleDateString()}
           </p>
@@ -162,16 +164,10 @@ function DraggableTask({ task }: DraggableTaskProps) {
         <TaskAssignee
           taskId={task.id}
           projectId={task.projectId}
-          currentAssignee={task.assignee}
-          taskTitle={task.title}
-        />
-        <CommentSection
-          projectId={task.projectId}
-          taskId={task.id}
           taskTitle={task.title}
         />
       </CardContent>
-      {currentUserId === task.createdBy && (
+      {currentUserId && currentUserId === task.createdBy && (
         <EditTask task={task} open={editOpen} setOpen={setEditOpen} />
       )}
     </div>
@@ -223,6 +219,29 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Move sensor configuration to the top of the component
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8,
+    },
+    filter: (event: { target: HTMLElement }) => {
+      let target: HTMLElement | null = event.target as HTMLElement;
+      while (target && target !== document.body) {
+        if (target.hasAttribute("data-dnd-ignore")) {
+          console.log(
+            "Dnd-kit ignoring event due to data-dnd-ignore attribute:",
+            target
+          );
+          return false;
+        }
+        target = target.parentElement;
+      }
+      return true;
+    },
+  });
+
+  const sensors = useSensors(pointerSensor, useSensor(KeyboardSensor));
+
   useEffect(() => {
     if (!projectId) {
       setError("Invalid project ID provided.");
@@ -247,13 +266,17 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
               description: data.description || "",
               status: data.status || "pending",
               projectId: data.projectId || "",
-              createdAt: data.createdAt?.toDate
-                ? data.createdAt.toDate()
-                : data.createdAt || new Date(),
+              createdAt:
+                data.createdAt instanceof Timestamp
+                  ? data.createdAt.toDate()
+                  : data.createdAt || new Date(),
               createdBy: data.createdBy || "",
               assignee: data.assignee || null,
               priority: data.priority || "medium",
-              dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : null,
+              dueDate:
+                data.dueDate instanceof Timestamp
+                  ? data.dueDate.toDate()
+                  : null,
             } as Task;
           });
           setTasks(taskData);
@@ -370,7 +393,11 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
         </Link>
       </div>
 
-      <DndContext collisionDetection={closestCorners} onDragEnd={onDragEnd}>
+      <DndContext
+        collisionDetection={closestCorners}
+        onDragEnd={onDragEnd}
+        sensors={sensors}
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {statuses.map((status) => {
             const columnTasks = tasks.filter((task) => task.status === status);
