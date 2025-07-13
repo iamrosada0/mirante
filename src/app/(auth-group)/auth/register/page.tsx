@@ -1,88 +1,31 @@
-"use client";
-import { useState } from "react";
-import { GoogleAuthProvider, signInWithPopup, User } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
-import { Loader2 } from "lucide-react";
-import { getFriendlyErrorMessage } from "@/lib/firebaseErrors";
+import { RegisterForm } from "@/components/RegisterForm";
+import { GalleryVerticalEnd } from "lucide-react";
 
-// Utility function to save user data to Firestore
-async function saveUserDataToFirestore(user: User): Promise<void> {
-  const userData = {
-    uid: user.uid,
-    email: user.email || null,
-    displayName: user.displayName || "Usuário Novo",
-    photoURL: user.photoURL || null,
-    createdAt: user.metadata.creationTime || new Date().toISOString(),
-    lastLoginAt: user.metadata.lastSignInTime || new Date().toISOString(),
-    providerId: user.providerData[0]?.providerId || "google.com",
-  };
-
-  try {
-    await setDoc(doc(db, "users", user.uid), userData);
-    console.log("User data saved to Firestore:", userData);
-  } catch (error) {
-    console.error("Error saving user data to Firestore:", error);
-    throw new Error("Failed to save user data.");
-  }
-}
-
-export default function Register() {
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-
-  // Handle Google Registration
-  const handleGoogleRegister = async () => {
-    setError("");
-    setIsLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      await saveUserDataToFirestore(userCredential.user);
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      setError(getFriendlyErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Register</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <Button
-            type="button"
-            onClick={handleGoogleRegister}
-            className="w-full"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing Up...
-              </>
-            ) : (
-              "Sign Up with Google"
-            )}
-          </Button>
-          <p className="text-sm text-center">
-            Already have an account?{" "}
-            <Link href="/auth/login" className="text-primary hover:underline">
-              Login
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <div className="flex flex-col gap-4 p-6 md:p-10">
+        <div className="flex justify-center gap-2 md:justify-start">
+          <a href="#" className="flex items-center gap-2 font-medium">
+            <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
+              <GalleryVerticalEnd className="size-4" />
+            </div>
+            Mirantes
+          </a>
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-xs">
+            <RegisterForm />
+          </div>
+        </div>
+      </div>
+      <div className="bg-muted relative hidden lg:block">
+        <img
+          src="https://cdn.lucidityinsights.com/uploads/startups/mirantes-technologies.jpg"
+          alt="Image"
+          className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
+        />
+      </div>
     </div>
   );
 }
