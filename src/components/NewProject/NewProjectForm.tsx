@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
+import { projectSchema } from "@/lib/zodSchemas";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { MemberCheckbox } from "./MemberCheckbox";
@@ -30,74 +30,57 @@ export function NewProjectForm() {
     setError,
   } = useNewProject();
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [titleError, setTitleError] = useState("");
-  const [dateError, setDateError] = useState("");
+  const [formState, setFormState] = useState({
+    title: "",
+    description: "",
+    startDate: "",
+    endDate: "",
+  });
+
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(true);
-
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setTitleError("");
-    setDateError("");
+    setValidationErrors({});
     setError("");
-
-    if (!title.trim()) {
-      setTitleError("Project title is required.");
-      return;
-    }
-
-    if (title.length > 100) {
-      setTitleError("Project title must be 100 characters or less.");
-      return;
-    }
-
-    if (description.length > 500) {
-      setError("Description must be 500 characters or less.");
-      return;
-    }
-
-    if (!startDate) {
-      setDateError("Start date is required.");
-      return;
-    }
-
-    const start = new Date(startDate);
-    if (isNaN(start.getTime())) {
-      setDateError("Invalid start date.");
-      return;
-    }
-
-    if (endDate) {
-      const end = new Date(endDate);
-      if (isNaN(end.getTime())) {
-        setDateError("Invalid end date.");
-        return;
-      }
-      if (end < start) {
-        setDateError("End date cannot be before start date.");
-        return;
-      }
-    }
 
     if (!user) {
       setError("No user is logged in.");
       return;
     }
 
-    setIsSubmitting(true);
+    const result = projectSchema.safeParse({
+      ...formState,
+      userId: user.uid,
+      members,
+    });
 
+    if (!result.success) {
+      const errors = result.error.format();
+      const flatErrors: Record<string, string> = {};
+      if (errors.title?._errors) flatErrors.title = errors.title._errors[0];
+      if (errors.startDate?._errors)
+        flatErrors.startDate = errors.startDate._errors[0];
+      if (errors.endDate?._errors)
+        flatErrors.endDate = errors.endDate._errors[0];
+      if (errors.description?._errors)
+        flatErrors.description = errors.description._errors[0];
+      setValidationErrors(flatErrors);
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const projectRef = await addDoc(collection(db, "projects"), {
-        title: title.trim(),
-        description: description.trim(),
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
+        title: formState.title.trim(),
+        description: formState.description.trim(),
+        startDate: new Date(formState.startDate),
+        endDate: formState.endDate ? new Date(formState.endDate) : null,
         members,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
@@ -107,7 +90,7 @@ export function NewProjectForm() {
         if (memberId !== user.uid) {
           await addDoc(collection(db, "notifications"), {
             userId: memberId,
-            message: `You have been added to the project "${title.trim()}" by ${user.displayName || "Anonymous"}.`,
+            message: `You have been added to the project "${formState.title.trim()}" by ${user.displayName || "Anonymous"}.`,
             projectId: projectRef.id,
             taskId: null,
             read: false,
@@ -158,47 +141,59 @@ export function NewProjectForm() {
           <DialogTitle>New Project</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Project Title</Label>
             <Input
               id="title"
               placeholder="Project Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              aria-invalid={!!titleError}
-              aria-describedby={titleError ? "title-error" : undefined}
+              value={formState.title}
+              onChange={(e) =>
+                setFormState((prev) => ({ ...prev, title: e.target.value }))
+              }
               disabled={isSubmitting}
             />
-            {titleError && (
-              <p id="title-error" className="text-red-500 text-sm">
-                {titleError}
-              </p>
+            {validationErrors.title && (
+              <p className="text-red-500 text-sm">{validationErrors.title}</p>
             )}
           </div>
 
-          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
               placeholder="Description"
+              value={formState.description}
+              onChange={(e) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
               disabled={isSubmitting}
             />
+            {validationErrors.description && (
+              <p className="text-red-500 text-sm">
+                {validationErrors.description}
+              </p>
+            )}
           </div>
 
-          {/* Start & End Date */}
           <div className="space-y-2">
             <Label htmlFor="startDate">Start Date</Label>
             <Input
               id="startDate"
               type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={formState.startDate}
+              onChange={(e) =>
+                setFormState((prev) => ({ ...prev, startDate: e.target.value }))
+              }
               disabled={isSubmitting}
             />
+            {validationErrors.startDate && (
+              <p className="text-red-500 text-sm">
+                {validationErrors.startDate}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -206,18 +201,17 @@ export function NewProjectForm() {
             <Input
               id="endDate"
               type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={formState.endDate}
+              onChange={(e) =>
+                setFormState((prev) => ({ ...prev, endDate: e.target.value }))
+              }
               disabled={isSubmitting}
             />
-            {dateError && (
-              <p id="date-error" className="text-red-500 text-sm">
-                {dateError}
-              </p>
+            {validationErrors.endDate && (
+              <p className="text-red-500 text-sm">{validationErrors.endDate}</p>
             )}
           </div>
 
-          {/* Members */}
           <div className="space-y-2">
             <Label>Members</Label>
             <div className="space-y-2">
@@ -241,7 +235,6 @@ export function NewProjectForm() {
             </div>
           </div>
 
-          {/* Submit */}
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? (
