@@ -14,7 +14,7 @@ export function DashboardProjects({ projects }: Props) {
     <Card>
       <CardHeader className="flex justify-between items-center">
         <CardTitle>Meus Projetos</CardTitle>
-        <Link href="/dashboard/new">
+        <Link href="/dashboard/projects/new">
           <Button aria-label="Criar novo projeto">Criar Projeto</Button>
         </Link>
       </CardHeader>
