@@ -34,7 +34,7 @@ import {
 
 // IMPORT THE SHARED TASK INTERFACE
 import { Task } from "@/types/task"; // <--- THIS IS CRUCIAL
-import { createNotification } from "@/lib/utils";
+import { createNotification } from "@/lib";
 
 // No need to define Task interface here, it's imported
 
