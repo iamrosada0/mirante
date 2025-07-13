@@ -7,18 +7,23 @@ import {
   doc,
   query,
   where,
+  getDoc,
+  addDoc,
+  serverTimestamp,
+  deleteDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase"; // Ensure this path is correct for your Firebase config
+import { auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Task } from "@/types/task"; // Ensure this path is correct for your Task type definition
+import { Task } from "@/types/task";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import {
   DndContext,
-  closestCorners, // Changed from closestCenter to closestCorners for better droppable detection
+  closestCorners,
   DragEndEvent,
-  useDroppable, // <--- NEW: Import useDroppable
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -26,15 +31,22 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { TaskAssignee } from "@/components/TaskAssignee";
+import { CommentSection } from "@/components/CommentSection";
+import { Notifications } from "@/components/Notifications";
+import { EditTask } from "@/components/EditTask";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TaskBoardProps {
   projectId: string;
 }
 
-/**
- * DraggableTask Component
- * Represents an individual task card that can be dragged.
- */
 interface DraggableTaskProps {
   task: Task;
 }
@@ -47,7 +59,17 @@ function DraggableTask({ task }: DraggableTaskProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id }); // The ID for dnd-kit should be unique for the draggable item
+  } = useSortable({ id: task.id });
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  // Get current user
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setCurrentUserId(user ? user.uid : null);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,6 +84,44 @@ function DraggableTask({ task }: DraggableTaskProps) {
     opacity: isDragging ? 0.8 : 1,
   };
 
+  const handleAction = async (action: string) => {
+    if (action === "edit") {
+      setEditOpen(true);
+    } else if (action === "delete") {
+      if (currentUserId !== task.createdBy) {
+        console.error("Only the task creator can delete this task.");
+        return;
+      }
+      try {
+        const projectDoc = await getDoc(doc(db, "projects", task.projectId));
+        const projectTitle = projectDoc.exists()
+          ? projectDoc.data().title
+          : "Unknown Project";
+        const projectData = projectDoc.data();
+        const memberUids = projectData?.members || [];
+
+        // Notify project members about deletion
+        for (const memberId of memberUids) {
+          if (memberId !== currentUserId) {
+            await addDoc(collection(db, "notifications"), {
+              userId: memberId,
+              message: `Task "${task.title}" in project "${projectTitle}" was deleted by ${auth.currentUser?.displayName || "Anonymous"}.`,
+              taskId: task.id,
+              projectId: task.projectId,
+              read: false,
+              createdAt: serverTimestamp(),
+              type: "task_deleted",
+            });
+          }
+        }
+
+        await deleteDoc(doc(db, "tasks", task.id));
+      } catch (err: unknown) {
+        console.error("Error deleting task:", err);
+      }
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -71,19 +131,53 @@ function DraggableTask({ task }: DraggableTaskProps) {
       className="mb-3 p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-all duration-200"
     >
       <CardContent className="p-0">
-        <p className="font-medium text-gray-800 text-base">{task.title}</p>
+        <div className="flex justify-between items-center mb-2">
+          <p className="font-medium text-gray-800 text-base">{task.title}</p>
+          {currentUserId === task.createdBy && (
+            <Select onValueChange={handleAction}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Actions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="edit">Edit</SelectItem>
+                <SelectItem value="delete">Delete</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground text-gray-600 mt-1">
           {task.description || "No description provided."}
         </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Assignee: {task.assignee || "Unassigned"}
+        </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Priority: {task.priority || "Medium"}
+        </p>
+        {task.dueDate && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Due: {task.dueDate.toLocaleDateString()}
+          </p>
+        )}
+        <TaskAssignee
+          taskId={task.id}
+          projectId={task.projectId}
+          currentAssignee={task.assignee}
+          taskTitle={task.title}
+        />
+        <CommentSection
+          projectId={task.projectId}
+          taskId={task.id}
+          taskTitle={task.title}
+        />
       </CardContent>
+      {currentUserId === task.createdBy && (
+        <EditTask task={task} open={editOpen} setOpen={setEditOpen} />
+      )}
     </div>
   );
 }
 
-/**
- * DroppableColumn Component
- * Represents a Kanban column (pending, in-progress, completed) that tasks can be dropped into.
- */
 interface DroppableColumnProps {
   status: string;
   tasks: Task[];
@@ -91,9 +185,7 @@ interface DroppableColumnProps {
 }
 
 function DroppableColumn({ status, tasks, children }: DroppableColumnProps) {
-  const { setNodeRef } = useDroppable({
-    id: status, // This is the ID of the droppable area (the column's status)
-  });
+  const { setNodeRef } = useDroppable({ id: status });
 
   return (
     <Card
@@ -118,7 +210,7 @@ function DroppableColumn({ status, tasks, children }: DroppableColumnProps) {
               No tasks in this column. Drag and drop here!
             </p>
           ) : (
-            children // Render the DraggableTask components passed as children
+            children
           )}
         </SortableContext>
       </CardContent>
@@ -126,17 +218,11 @@ function DroppableColumn({ status, tasks, children }: DroppableColumnProps) {
   );
 }
 
-/**
- * TaskBoard Component
- * Displays a Kanban-style board for tasks associated with a project.
- * Allows dragging tasks between status columns.
- */
 export default function TaskBoard({ projectId }: TaskBoardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Effect to fetch tasks from Firestore
   useEffect(() => {
     if (!projectId) {
       setError("Invalid project ID provided.");
@@ -149,7 +235,6 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
       where("projectId", "==", projectId)
     );
 
-    // Set up real-time listener for tasks
     const unsubscribe = onSnapshot(
       tasksQuery,
       (snapshot) => {
@@ -160,11 +245,15 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
               id: doc.id,
               title: data.title || "Untitled Task",
               description: data.description || "",
-              status: data.status || "pending", // Default status if not present
+              status: data.status || "pending",
               projectId: data.projectId || "",
               createdAt: data.createdAt?.toDate
                 ? data.createdAt.toDate()
                 : data.createdAt || new Date(),
+              createdBy: data.createdBy || "",
+              assignee: data.assignee || null,
+              priority: data.priority || "medium",
+              dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : null,
             } as Task;
           });
           setTasks(taskData);
@@ -194,55 +283,6 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
     return () => unsubscribe();
   }, [projectId]);
 
-  // Handler for when a drag operation ends
-  // const onDragEnd = async (event: DragEndEvent) => {
-  //   const { active, over } = event;
-
-  //   if (!over) {
-  //     console.log("Task dropped outside any valid column.");
-  //     return;
-  //   }
-
-  //   const activeTaskId = String(active.id);
-  //   // CRITICAL: Ensure `over.id` refers to the column's status, not a task ID.
-  //   // By using `useDroppable` on the column, `over.id` will correctly be the column's ID.
-  //   const newStatus = String(over.id);
-
-  //   const taskBeingDragged = tasks.find((task) => task.id === activeTaskId);
-
-  //   if (taskBeingDragged) {
-  //     if (taskBeingDragged.status !== newStatus) {
-  //       console.log(
-  //         `Attempting to move task "${taskBeingDragged.title}" (ID: ${activeTaskId}) from "${taskBeingDragged.status}" to "${newStatus}"`
-  //       );
-  //       try {
-  //         await updateDoc(doc(db, "tasks", taskBeingDragged.id), {
-  //           status: newStatus,
-  //         });
-  //         console.log(
-  //           `Successfully updated task ID ${activeTaskId} to status: ${newStatus}`
-  //         );
-  //       } catch (err: unknown) {
-  //         console.error("Error updating task status in Firestore:", err);
-  //         setError(
-  //           err instanceof Error
-  //             ? `Failed to update task status: ${err.message}`
-  //             : "Failed to update task status. Please try again."
-  //         );
-  //       }
-  //     } else {
-  //       console.log(
-  //         `Task "${taskBeingDragged.title}" dropped within its original column (${newStatus}). No status change.`
-  //       );
-  //     }
-  //   } else {
-  //     console.warn(
-  //       `Dragged task with ID ${activeTaskId} not found in the current state. This might indicate a data sync issue.`
-  //     );
-  //   }
-  // };
-  // ... (inside TaskBoard component)
-
   const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -254,15 +294,12 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
     const activeTaskId = String(active.id);
     const newStatus = String(over.id);
 
-    // Define your valid statuses
     const validStatuses = ["pending", "in-progress", "completed"];
-
-    // *** NEW: Check if the newStatus is a valid column status ***
     if (!validStatuses.includes(newStatus)) {
       console.warn(
         `Dropped on an invalid target ID: ${newStatus}. Not updating task status.`
       );
-      return; // Exit if the target is not a recognized column
+      return;
     }
 
     const taskBeingDragged = tasks.find((task) => task.id === activeTaskId);
@@ -298,12 +335,11 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
       );
     }
   };
-  // --- Render Logic ---
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
         <p className="mt-4 text-lg text-gray-700">Loading tasks...</p>
       </div>
     );
@@ -324,6 +360,7 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
+      <Notifications projectId={projectId} />
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
         <h2 className="text-3xl font-bold text-gray-800">Project Tasks</h2>
         <Link href={`/dashboard/tasks/new?projectId=${projectId}`}>
@@ -332,6 +369,7 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
           </Button>
         </Link>
       </div>
+
       <DndContext collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {statuses.map((status) => {
