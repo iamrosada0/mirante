@@ -23,7 +23,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { Project } from "@/types/project";
 import { use } from "react";
-import { createNotification } from "@/lib/utils";
+import { createNotification } from "@/lib";
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;
