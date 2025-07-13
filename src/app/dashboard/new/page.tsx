@@ -1,7 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { addDoc, collection, doc, getDoc } from "firebase/firestore";
-import { serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  serverTimestamp,
+} from "firebase/firestore";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -36,14 +42,21 @@ export default function NewProject() {
   const [open, setOpen] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [members, setMembers] = useState<string[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<
+    { uid: string; displayName: string }[]
+  >([]);
   const [error, setError] = useState("");
   const [titleError, setTitleError] = useState("");
+  const [dateError, setDateError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [userLoading, setUserLoading] = useState(true);
   const router = useRouter();
 
-  // Verify user is logged in and exists in Firestore
+  // Fetch available users and verify logged-in user
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -71,6 +84,15 @@ export default function NewProject() {
           }
 
           setUser(currentUser);
+          setMembers([currentUser.uid]); // Automatically add the creator to members
+
+          // Fetch all users for member selection
+          const usersSnapshot = await getDocs(collection(db, "users"));
+          const usersData = usersSnapshot.docs.map((doc) => ({
+            uid: doc.id,
+            displayName: doc.data().displayName || "Unknown",
+          }));
+          setAvailableUsers(usersData);
         } catch (err: unknown) {
           setError(getFriendlyErrorMessage(err));
           setTimeout(() => router.push("/auth/login"), 2000);
@@ -88,6 +110,7 @@ export default function NewProject() {
     e.preventDefault();
     setError("");
     setTitleError("");
+    setDateError("");
 
     // Validate inputs
     if (!title.trim()) {
@@ -102,6 +125,26 @@ export default function NewProject() {
       setError("Description must be 500 characters or less.");
       return;
     }
+    if (!startDate) {
+      setDateError("Start date is required.");
+      return;
+    }
+    const start = new Date(startDate);
+    if (isNaN(start.getTime())) {
+      setDateError("Invalid start date.");
+      return;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (isNaN(end.getTime())) {
+        setDateError("Invalid end date.");
+        return;
+      }
+      if (end < start) {
+        setDateError("End date cannot be before start date.");
+        return;
+      }
+    }
 
     if (!user) {
       setError("No user is logged in.");
@@ -110,21 +153,46 @@ export default function NewProject() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "projects"), {
+      const projectRef = await addDoc(collection(db, "projects"), {
         title: title.trim(),
         description: description.trim(),
-        startDate: serverTimestamp(),
-        members: [user.uid],
+        startDate: new Date(startDate),
+        endDate: endDate ? new Date(endDate) : null,
+        members,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
       });
+
+      // Notify all members except the creator
+      for (const memberId of members) {
+        if (memberId !== user.uid) {
+          await addDoc(collection(db, "notifications"), {
+            userId: memberId,
+            message: `You have been added to the project "${title.trim()}" by ${user.displayName || "Anonymous"}.`,
+            projectId: projectRef.id,
+            taskId: null,
+            read: false,
+            createdAt: serverTimestamp(),
+            type: "project_member_added",
+          });
+        }
+      }
+
       setOpen(false);
-      setTimeout(() => router.push("/dashboard"), 100); // Delay to ensure hydration
+      setTimeout(() => router.push("/dashboard"), 100);
     } catch (err: unknown) {
       setError(getFriendlyErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handle member selection
+  const handleMemberChange = (uid: string) => {
+    if (uid === user?.uid) return; // Prevent removing the creator
+    setMembers((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
   };
 
   if (userLoading) {
@@ -184,6 +252,53 @@ export default function NewProject() {
               onChange={(e) => setDescription(e.target.value)}
               disabled={isSubmitting}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="startDate">Start Date</Label>
+            <Input
+              id="startDate"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="endDate">End Date (Optional)</Label>
+            <Input
+              id="endDate"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              disabled={isSubmitting}
+            />
+            {dateError && (
+              <p id="date-error" className="text-red-500 text-sm">
+                {dateError}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Members</Label>
+            <div className="space-y-2">
+              {availableUsers.map((availableUser) => (
+                <div
+                  key={availableUser.uid}
+                  className="flex items-center space-x-2"
+                >
+                  <input
+                    type="checkbox"
+                    id={availableUser.uid}
+                    checked={members.includes(availableUser.uid)}
+                    onChange={() => handleMemberChange(availableUser.uid)}
+                    disabled={availableUser.uid === user?.uid || isSubmitting}
+                  />
+                  <Label htmlFor={availableUser.uid}>
+                    {availableUser.displayName}
+                  </Label>
+                </div>
+              ))}
+            </div>
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <Button type="submit" disabled={isSubmitting}>
