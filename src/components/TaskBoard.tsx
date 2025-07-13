@@ -56,14 +56,8 @@ interface DraggableTaskProps {
 }
 
 function DraggableTask({ task }: DraggableTaskProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: task.id });
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -77,14 +71,14 @@ function DraggableTask({ task }: DraggableTaskProps) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 10 : 0,
-    boxShadow: isDragging
+    zIndex: transform ? 10 : 0,
+    boxShadow: transform
       ? "0 4px 8px rgba(0, 0, 0, 0.15)"
       : "0 1px 3px rgba(0, 0, 0, 0.05)",
     backgroundColor: "white",
     borderRadius: "0.5rem",
     cursor: "grab",
-    opacity: isDragging ? 0.8 : 1,
+    opacity: transform ? 0.8 : 1,
   };
 
   const handleAction = async (action: string) => {
@@ -182,12 +176,18 @@ interface DroppableColumnProps {
 }
 
 function DroppableColumn({ status, tasks, children }: DroppableColumnProps) {
-  const { setNodeRef } = useDroppable({ id: status });
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+
+  useEffect(() => {
+    if (isOver) {
+      console.log(`Task is being dragged over column: ${status}`);
+    }
+  }, [isOver, status]);
 
   return (
     <Card
       ref={setNodeRef}
-      className="bg-white shadow-xl rounded-lg flex flex-col"
+      className={`bg-white shadow-xl rounded-lg flex flex-col ${isOver ? "bg-blue-50" : ""}`}
     >
       <CardHeader className="border-b border-gray-200 pb-4 mb-4 bg-gray-50 rounded-t-lg">
         <CardTitle className="text-xl font-bold text-gray-700 flex items-center justify-between">
@@ -197,9 +197,12 @@ function DroppableColumn({ status, tasks, children }: DroppableColumnProps) {
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="min-h-[150px] p-4 flex-grow">
+      <CardContent className="min-h-[650px] p-4 flex-grow">
         <SortableContext
-          items={tasks.map((task) => task.id)}
+          items={tasks.map((task) => {
+            console.log(`Task ID for ${status} column: ${task.id}`);
+            return task.id;
+          })}
           strategy={verticalListSortingStrategy}
         >
           {tasks.length === 0 ? (
@@ -220,7 +223,6 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Move sensor configuration to the top of the component
   const pointerSensor = useSensor(PointerSensor, {
     activationConstraint: {
       distance: 8,
@@ -261,6 +263,7 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
         try {
           const taskData = snapshot.docs.map((doc) => {
             const data = doc.data();
+            console.log(`Task fetched: ID=${doc.id}, Status=${data.status}`);
             return {
               id: doc.id,
               title: data.title || "Untitled Task",
@@ -282,10 +285,7 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
           });
           setTasks(taskData);
           console.log(
-            "Fetched tasks for project:",
-            projectId,
-            taskData.length,
-            "tasks"
+            `Updated tasks state: ${taskData.length} tasks for project ${projectId}`
           );
           setError(null);
         } catch (err: unknown) {
@@ -311,51 +311,58 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
     const { active, over } = event;
 
     if (!over) {
-      console.log("Task dropped outside any valid column.");
+      console.log("No valid drop target (over is null).");
       return;
     }
 
     const activeTaskId = String(active.id);
-    const newStatus = String(over.id);
+    const newStatus = String(over.id) as
+      | "pending"
+      | "in-progress"
+      | "completed";
 
-    const validStatuses = ["pending", "in-progress", "completed"];
+    const validStatuses = ["pending", "in-progress", "completed"] as const;
     if (!validStatuses.includes(newStatus)) {
       console.warn(
-        `Dropped on an invalid target ID: ${newStatus}. Not updating task status.`
+        `Invalid drop target ID: ${newStatus}. Valid statuses: ${validStatuses}`
       );
       return;
     }
 
     const taskBeingDragged = tasks.find((task) => task.id === activeTaskId);
+    if (!taskBeingDragged) {
+      console.warn(`Task with ID ${activeTaskId} not found in tasks state.`);
+      return;
+    }
 
-    if (taskBeingDragged) {
-      if (taskBeingDragged.status !== newStatus) {
-        console.log(
-          `Attempting to move task "${taskBeingDragged.title}" (ID: ${activeTaskId}) from "${taskBeingDragged.status}" to "${newStatus}"`
-        );
-        try {
-          await updateDoc(doc(db, "tasks", taskBeingDragged.id), {
-            status: newStatus,
-          });
-          console.log(
-            `Successfully updated task ID ${activeTaskId} to status: ${newStatus}`
-          );
-        } catch (err: unknown) {
-          console.error("Error updating task status in Firestore:", err);
-          setError(
-            err instanceof Error
-              ? `Failed to update task status: ${err.message}`
-              : "Failed to update task status. Please try again."
-          );
-        }
-      } else {
-        console.log(
-          `Task "${taskBeingDragged.title}" dropped within its original column (${newStatus}). No status change.`
-        );
-      }
-    } else {
-      console.warn(
-        `Dragged task with ID ${activeTaskId} not found in the current state. This might indicate a data sync issue.`
+    console.log(
+      `Dragging task "${taskBeingDragged.title}" (ID: ${activeTaskId}) from "${taskBeingDragged.status}" to "${newStatus}"`
+    );
+
+    if (taskBeingDragged.status === newStatus) {
+      console.log("Task dropped in its current column. No update needed.");
+      return;
+    }
+
+    try {
+      const taskRef = doc(db, "tasks", activeTaskId);
+      await updateDoc(taskRef, { status: newStatus });
+      console.log(
+        `Successfully updated task ${activeTaskId} to status: ${newStatus}`
+      );
+
+      // Update local state immediately to reflect the change
+      setTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.id === activeTaskId ? { ...task, status: newStatus } : task
+        )
+      );
+    } catch (err: unknown) {
+      console.error("Error updating task status:", err);
+      setError(
+        err instanceof Error
+          ? `Failed to update task: ${err.message}`
+          : "Failed to update task status. Please try again."
       );
     }
   };
@@ -380,7 +387,7 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
     );
   }
 
-  const statuses = ["pending", "in-progress", "completed"];
+  const statuses = ["pending", "in-progress", "completed"] as const;
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
