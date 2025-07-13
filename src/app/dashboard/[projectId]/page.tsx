@@ -3,7 +3,6 @@ import { useRouter } from "next/navigation";
 
 import { use, useState } from "react";
 import { useProject } from "@/hooks/useProject";
-import TaskBoard from "@/components/TaskBoard";
 import { CommentSection } from "@/components/CommentSection";
 import { Notifications } from "@/components/Notifications";
 import { EditProject } from "@/components/EditProject";
@@ -11,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
+import TaskBoard from "@/components/TaskBoard/TaskBoard";
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;

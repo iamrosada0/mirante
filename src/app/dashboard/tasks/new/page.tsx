@@ -24,23 +24,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getFriendlyErrorMessage } from "@/lib/firebaseErrors";
+import { z } from "zod"; // Import Zod
+
+// Define Zod schema for task validation
+const taskSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Task title is required.")
+    .max(100, "Task title must be 100 characters or less.")
+    .trim(),
+  description: z
+    .string()
+    .max(500, "Description must be 500 characters or less.")
+    .optional()
+    .default(""),
+  dueDate: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val) return true; // Allow empty dueDate
+        const due = new Date(val);
+        return !isNaN(due.getTime()) && due >= new Date();
+      },
+      { message: "Due date must be a valid date and not in the past." }
+    ),
+  assignee: z.string().nullable(),
+  priority: z.enum(["low", "medium", "high"]),
+  projectId: z.string().min(1, "Project ID is required."),
+});
 
 interface NewTaskProps {
   projectId?: string;
 }
-
-const getFriendlyErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    const code = (error as { code?: string }).code;
-    switch (code) {
-      case "auth/network-request-failed":
-        return "Network error. Please check your connection and try again.";
-      default:
-        return error.message || "An unexpected error occurred.";
-    }
-  }
-  return "An unexpected error occurred.";
-};
 
 export default function NewTask({
   projectId: propProjectId,
@@ -55,8 +72,9 @@ export default function NewTask({
     { uid: string; displayName: string }[]
   >([]);
   const [error, setError] = useState("");
-  const [titleError, setTitleError] = useState("");
-  const [dueDateError, setDueDateError] = useState("");
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [userLoading, setUserLoading] = useState(true);
@@ -147,40 +165,38 @@ export default function NewTask({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setTitleError("");
-    setDueDateError("");
+    setValidationErrors({});
 
-    // Validate inputs
-    if (!title.trim()) {
-      setTitleError("Task title is required.");
-      return;
-    }
-    if (title.length > 100) {
-      setTitleError("Task title must be 100 characters or less.");
-      return;
-    }
-    if (description.length > 500) {
-      setError("Description must be 500 characters or less.");
-      return;
-    }
-    if (dueDate) {
-      const due = new Date(dueDate);
-      const now = new Date();
-      if (isNaN(due.getTime())) {
-        setDueDateError("Invalid due date.");
-        return;
-      }
-      if (due < now) {
-        setDueDateError("Due date cannot be in the past.");
-        return;
-      }
-    }
-    if (!projectId) {
-      setError("Invalid project ID. Please select a project.");
-      return;
-    }
     if (!user) {
       setError("No user is logged in.");
+      return;
+    }
+
+    // Validate inputs with Zod
+    const validationResult = taskSchema.safeParse({
+      title,
+      description,
+      dueDate,
+      assignee,
+      priority,
+      projectId,
+    });
+
+    if (!validationResult.success) {
+      const errors = validationResult.error.issues.reduce(
+        (acc, issue) => ({
+          ...acc,
+          [issue.path[0]]: issue.message,
+        }),
+        {} as Record<string, string>
+      );
+      setValidationErrors(errors);
+      return;
+    }
+
+    // Ensure projectId is a string
+    if (!projectId) {
+      setError("Invalid project ID. Please select a project.");
       return;
     }
 
@@ -200,7 +216,10 @@ export default function NewTask({
 
       // Notify assignee if assigned
       if (assignee) {
-        const projectDoc = await getDoc(doc(db, "projects", projectId));
+        // Use type assertion or guard since projectId is already validated
+        const projectDoc = await getDoc(
+          doc(db, "projects", projectId as string)
+        );
         const projectTitle = projectDoc.exists()
           ? projectDoc.data().title
           : "Unknown Project";
@@ -264,13 +283,15 @@ export default function NewTask({
               placeholder="Task Title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              aria-invalid={!!titleError}
-              aria-describedby={titleError ? "title-error" : undefined}
+              aria-invalid={!!validationErrors.title}
+              aria-describedby={
+                validationErrors.title ? "title-error" : undefined
+              }
               disabled={isSubmitting}
             />
-            {titleError && (
+            {validationErrors.title && (
               <p id="title-error" className="text-red-500 text-sm">
-                {titleError}
+                {validationErrors.title}
               </p>
             )}
           </div>
@@ -281,8 +302,17 @@ export default function NewTask({
               placeholder="Description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              aria-invalid={!!validationErrors.description}
+              aria-describedby={
+                validationErrors.description ? "description-error" : undefined
+              }
               disabled={isSubmitting}
             />
+            {validationErrors.description && (
+              <p id="description-error" className="text-red-500 text-sm">
+                {validationErrors.description}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="dueDate">Due Date (Optional)</Label>
@@ -291,11 +321,15 @@ export default function NewTask({
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
+              aria-invalid={!!validationErrors.dueDate}
+              aria-describedby={
+                validationErrors.dueDate ? "dueDate-error" : undefined
+              }
               disabled={isSubmitting}
             />
-            {dueDateError && (
+            {validationErrors.dueDate && (
               <p id="dueDate-error" className="text-red-500 text-sm">
-                {dueDateError}
+                {validationErrors.dueDate}
               </p>
             )}
           </div>
@@ -317,6 +351,11 @@ export default function NewTask({
                 ))}
               </SelectContent>
             </Select>
+            {validationErrors.assignee && (
+              <p id="assignee-error" className="text-red-500 text-sm">
+                {validationErrors.assignee}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="priority">Priority</Label>
@@ -335,6 +374,11 @@ export default function NewTask({
                 <SelectItem value="high">High</SelectItem>
               </SelectContent>
             </Select>
+            {validationErrors.priority && (
+              <p id="priority-error" className="text-red-500 text-sm">
+                {validationErrors.priority}
+              </p>
+            )}
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <Button type="submit" disabled={isSubmitting}>
