@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState } from "react";
 import { GoogleAuthProvider, signInWithPopup, User } from "firebase/auth";
@@ -9,24 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-
-// Map Firebase error codes to user-friendly messages
-const getFriendlyErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    const code = (error as any).code;
-    switch (code) {
-      case "auth/popup-closed-by-user":
-        return "Google sign-in was canceled.";
-      case "auth/network-request-failed":
-        return "Network error. Please check your connection and try again.";
-      case "auth/popup-blocked":
-        return "Popup blocked by browser. Please allow popups and try again.";
-      default:
-        return error.message || "An unexpected error occurred.";
-    }
-  }
-  return "An unexpected error occurred.";
-};
+import { getFriendlyErrorMessage } from "@/lib/firebaseErrors";
 
 export default function Login() {
   const [error, setError] = useState("");

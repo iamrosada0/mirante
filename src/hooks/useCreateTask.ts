@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // hooks/useCreateTask.ts
 import {
   addDoc,
@@ -10,7 +11,10 @@ import { db } from "@/lib/firebase";
 import { taskSchema } from "@/lib/zodSchemas";
 import { User } from "@/types";
 
-export function useCreateTask(projectId: string | null, user: User) {
+export function useCreateTask(
+  projectId: string | null,
+  user: User | null | any
+) {
   const createTask = async ({
     title,
     description,
