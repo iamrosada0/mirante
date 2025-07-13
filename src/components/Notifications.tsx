@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import { useState, useEffect } from "react";
+
+import { useEffect, useState } from "react";
 import {
   collection,
   query,
@@ -10,7 +10,7 @@ import {
   doc,
   Timestamp,
 } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -27,85 +27,71 @@ interface Notification {
   type: "assignment" | "comment" | "dueDate";
 }
 
-interface NotificationsProps {
-  projectId?: string; // Tornar projectId opcional para mostrar todas as notificações
-}
-
-export function Notifications({ projectId }: NotificationsProps) {
+export function Notifications() {
+  const [userUid, setUserUid] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Verifica se o usuário está logado
   useEffect(() => {
-    const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-      if (!currentUser) {
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setUserUid(user.uid);
+      } else {
         setError("Você precisa estar logado para ver notificações.");
       }
+      setLoading(false);
     });
 
     return () => unsubscribeAuth();
   }, []);
 
+  // Busca as notificações apenas do usuário logado
   useEffect(() => {
-    if (!user) return;
+    if (!userUid) return;
 
-    const constraints = [
-      where("userId", "==", user.uid),
-      where("read", "==", false),
-    ];
-    if (projectId) {
-      constraints.push(where("projectId", "==", projectId));
-    }
-
-    const notificationsQuery = query(
+    const q = query(
       collection(db, "notifications"),
-      ...constraints
+      where("userId", "==", userUid),
+      where("read", "==", false)
     );
 
-    const unsubscribeNotifications = onSnapshot(
-      notificationsQuery,
+    const unsubscribe = onSnapshot(
+      q,
       (snapshot) => {
-        const notificationData = snapshot.docs.map((doc) => ({
+        const data = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...doc.data(),
+          ...(doc.data() as Omit<Notification, "id" | "createdAt">),
           createdAt: doc.data().createdAt?.toDate() || new Date(),
-        })) as Notification[];
-        setNotifications(notificationData);
-        setLoading(false);
+        }));
+        setNotifications(data);
       },
       (err) => {
+        console.error("Erro ao buscar notificações:", err);
         setError("Erro ao carregar notificações.");
-        console.error("Error fetching notifications:", err);
-        setLoading(false);
       }
     );
 
-    return () => unsubscribeNotifications();
-  }, [user, projectId]);
+    return () => unsubscribe();
+  }, [userUid]);
 
-  const markAsRead = async (notificationId: string) => {
+  // Marcar como lida
+  const markAsRead = async (id: string) => {
     try {
-      await updateDoc(doc(db, "notifications", notificationId), { read: true });
+      await updateDoc(doc(db, "notifications", id), {
+        read: true,
+      });
     } catch (err) {
-      console.error("Error marking notification as read:", err);
+      console.error("Erro ao marcar notificação como lida:", err);
       setError("Erro ao marcar notificação como lida.");
     }
   };
 
-  if (loading) {
-    return <div>Carregando notificações...</div>;
-  }
-
-  if (error) {
-    return <div className="text-red-500">{error}</div>;
-  }
-
-  if (!user) {
-    return null;
-  }
+  // Renderizações
+  if (loading) return <p>Carregando notificações...</p>;
+  if (error) return <p className="text-red-500">{error}</p>;
+  if (!userUid) return null;
 
   return (
     <div className="mb-6">
@@ -118,6 +104,7 @@ export function Notifications({ projectId }: NotificationsProps) {
           </span>
         )}
       </h3>
+
       {notifications.length === 0 ? (
         <p className="text-gray-500 mt-2">Nenhuma notificação nova.</p>
       ) : (
