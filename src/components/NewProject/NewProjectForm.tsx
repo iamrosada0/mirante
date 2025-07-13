@@ -5,7 +5,6 @@ import { projectSchema } from "@/lib/zodSchemas";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { MemberCheckbox } from "./MemberCheckbox";
-import { useNewProject } from "@/hooks/useNewProject";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +17,7 @@ import { Button } from "../ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { useNewProject } from "@/features/projects/hooks/useNewProject";
 
 export function NewProjectForm() {
   const {

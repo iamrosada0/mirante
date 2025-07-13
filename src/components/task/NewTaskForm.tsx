@@ -2,8 +2,8 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { useProjectAccess } from "@/hooks/useProjectAccess";
-import { useCreateTask } from "@/hooks/useCreateTask";
+import { useProjectAccess } from "@/features/projects/hooks/useProjectAccess";
+import { useCreateTask } from "@/features/tasks/hooks/useCreateTask";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";

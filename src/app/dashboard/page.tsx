@@ -3,11 +3,11 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { useAuthUser } from "@/hooks/useAuthUser";
 import { useProjects } from "@/features/projects/hooks/useProjects";
 import { UserHeader } from "@/components/dashboard/UserHeader";
 import { DashboardProjects } from "@/components/dashboard/DashboardProjects";
 import { Notifications } from "@/components/Notifications";
+import { useAuthUser } from "@/features/auth/hooks/useAuthUser";
 
 export default function Dashboard() {
   const [isSigningOut, setIsSigningOut] = useState(false);

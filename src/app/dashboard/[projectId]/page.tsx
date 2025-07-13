@@ -2,7 +2,6 @@
 import { useRouter } from "next/navigation";
 
 import { use, useState } from "react";
-import { useProject } from "@/hooks/useProject";
 import { CommentSection } from "@/components/CommentSection";
 import { Notifications } from "@/components/Notifications";
 import { EditProject } from "@/components/EditProject";
@@ -11,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import TaskBoard from "@/components/TaskBoard/TaskBoard";
+import { useProject } from "@/features/projects/hooks/useProject";
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;

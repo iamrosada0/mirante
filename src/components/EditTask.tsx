@@ -1,7 +1,6 @@
 // components/EditTask.tsx
 "use client";
 
-import { useEditTask } from "@/hooks/useEditTask";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { Task } from "@/types/task";
+import { useEditTask } from "@/features/tasks/hooks/useEditTask";
 
 interface EditTaskProps {
   task: Task;
