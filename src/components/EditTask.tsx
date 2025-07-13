@@ -34,6 +34,7 @@ import {
 
 // IMPORT THE SHARED TASK INTERFACE
 import { Task } from "@/types/task"; // <--- THIS IS CRUCIAL
+import { createNotification } from "@/lib/utils";
 
 // No need to define Task interface here, it's imported
 
@@ -239,19 +240,17 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
         });
 
         // Notify assignee if changed
-        if (assignee && assignee !== task.assignee && assignee !== user.uid) {
+        //  if (assignee && assignee !== task.assignee && assignee !== user.uid) {
+        if (assignee) {
           const projectDoc = await getDoc(doc(db, "projects", task.projectId));
           const projectTitle = projectDoc.exists()
-            ? (projectDoc.data() as ProjectData).title
+            ? projectDoc.data().title
             : "Unknown Project";
-
-          await addDoc(collection(db, "notifications"), {
+          await createNotification({
             userId: assignee,
-            message: `You have been assigned to task "${title.trim()}" in project "${projectTitle}" by ${user.displayName || "Anonymous"}.`,
+            message: `Você foi atribuído à tarefa "${title.trim()}" no projeto "${projectTitle}".`,
             taskId: task.id,
             projectId: task.projectId,
-            read: false,
-            createdAt: serverTimestamp(),
             type: "assignment",
           });
         }
