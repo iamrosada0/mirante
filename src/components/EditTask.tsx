@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   doc,
   getDoc,
@@ -7,9 +7,9 @@ import {
   deleteDoc,
   collection,
   addDoc,
-  // getDocs,
+  serverTimestamp,
+  Timestamp, // Make sure Timestamp is imported for type checks
 } from "firebase/firestore";
-import { serverTimestamp } from "firebase/firestore";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -19,7 +19,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  // DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,12 +31,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Task } from "@/types/task";
+
+// IMPORT THE SHARED TASK INTERFACE
+import { Task } from "@/types/task"; // <--- THIS IS CRUCIAL
+
+// No need to define Task interface here, it's imported
 
 interface EditTaskProps {
-  task: Task;
+  task: Task; // Uses the imported Task interface
   open: boolean;
   setOpen: (open: boolean) => void;
+}
+
+interface ProjectData {
+  title: string;
+  members: string[];
+}
+
+interface UserData {
+  displayName: string;
 }
 
 const getFriendlyErrorMessage = (error: unknown): string => {
@@ -46,6 +58,11 @@ const getFriendlyErrorMessage = (error: unknown): string => {
     switch (code) {
       case "auth/network-request-failed":
         return "Network error. Please check your connection and try again.";
+      case "permission-denied":
+        return "You do not have permission to perform this action.";
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+        return "Invalid credentials. Please check your email and password.";
       default:
         return error.message || "An unexpected error occurred.";
     }
@@ -54,10 +71,25 @@ const getFriendlyErrorMessage = (error: unknown): string => {
 };
 
 export function EditTask({ task, open, setOpen }: EditTaskProps) {
-  const [title, setTitle] = useState(task.title);
+  // Robust initialization of dueDate:
+  // 1. Check if task.dueDate exists.
+  // 2. If it's a Firebase Timestamp, convert it to a Date.
+  // 3. If it's already a Date, use it.
+  // 4. If it's null/undefined, set initialDate to null.
+  const initialDueDateObj: Date | null = task.dueDate
+    ? task.dueDate instanceof Timestamp
+      ? task.dueDate.toDate()
+      : task.dueDate instanceof Date
+        ? task.dueDate
+        : null
+    : null;
+
+  const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
-  const [dueDate, setDueDate] = useState(
-    task.dueDate ? task.dueDate.toISOString().split("T")[0] : ""
+  const [dueDate, setDueDate] = useState<string>(
+    initialDueDateObj && !isNaN(initialDueDateObj.getTime())
+      ? initialDueDateObj.toISOString().split("T")[0]
+      : ""
   );
   const [assignee, setAssignee] = useState<string | null>(
     task.assignee || null
@@ -75,6 +107,12 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
   const [user, setUser] = useState<User | null>(null);
   const [userLoading, setUserLoading] = useState(true);
   const router = useRouter();
+
+  // Debugging log for component mount/render
+  useEffect(() => {
+    console.log("EditTask component mounted/rendered. Dialog open:", open);
+    console.log("Initial Task Data received:", task);
+  }, [open, task]); // Added task to dependencies to re-log if task prop changes
 
   // Fetch user and project members
   useEffect(() => {
@@ -120,14 +158,14 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
             return;
           }
 
-          const projectData = projectDoc.data();
+          const projectData = projectDoc.data() as ProjectData;
           const memberUids = projectData.members || [];
           const memberPromises = memberUids.map(async (uid: string) => {
-            const userDoc = await getDoc(doc(db, "users", uid));
+            const userMemberDoc = await getDoc(doc(db, "users", uid));
             return {
               uid,
-              displayName: userDoc.exists()
-                ? userDoc.data().displayName
+              displayName: userMemberDoc.exists()
+                ? ((userMemberDoc.data() as UserData).displayName ?? "Unknown")
                 : "Unknown",
             };
           });
@@ -137,6 +175,7 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
           setUser(currentUser);
         } catch (err: unknown) {
           setError(getFriendlyErrorMessage(err));
+          console.error("Error fetching data for EditTask:", err);
           setTimeout(() => setOpen(false), 2000);
         } finally {
           setUserLoading(false);
@@ -145,84 +184,102 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
     );
 
     return () => unsubscribe();
-  }, [router, task, setOpen]);
+  }, [router, task.createdBy, task.projectId, setOpen, task]); // Added 'task' to dependencies
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setTitleError("");
-    setDueDateError("");
+  // Handle form submission
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError("");
+      setTitleError("");
+      setDueDateError("");
 
-    // Validate inputs
-    if (!title.trim()) {
-      setTitleError("Task title is required.");
-      return;
-    }
-    if (title.length > 100) {
-      setTitleError("Task title must be 100 characters or less.");
-      return;
-    }
-    if (description.length > 500) {
-      setError("Description must be 500 characters or less.");
-      return;
-    }
-    if (dueDate) {
-      const due = new Date(dueDate);
-      const now = new Date();
-      if (isNaN(due.getTime())) {
-        setDueDateError("Invalid due date.");
+      // Validate inputs
+      if (!title.trim()) {
+        setTitleError("Task title is required.");
         return;
       }
-      if (due < now) {
-        setDueDateError("Due date cannot be in the past.");
+      if (title.length > 100) {
+        setTitleError("Task title must be 100 characters or less.");
         return;
       }
-    }
+      if (description.length > 500) {
+        setError("Description must be 500 characters or less.");
+        return;
+      }
+      if (dueDate) {
+        const due = new Date(dueDate);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0); // Zero out time for comparison
 
-    if (!user) {
-      setError("No user is logged in.");
-      return;
-    }
+        if (isNaN(due.getTime())) {
+          setDueDateError("Invalid due date.");
+          return;
+        }
+        if (due < now) {
+          setDueDateError("Due date cannot be in the past.");
+          return;
+        }
+      }
 
-    setIsSubmitting(true);
-    try {
-      await updateDoc(doc(db, "tasks", task.id), {
-        title: title.trim(),
-        description: description.trim(),
-        assignee: assignee || null,
-        priority,
-        dueDate: dueDate ? new Date(dueDate) : null,
-        updatedAt: serverTimestamp(),
-      });
+      if (!user) {
+        setError("No user is logged in.");
+        return;
+      }
 
-      // Notify assignee if changed
-      if (assignee && assignee !== task.assignee && assignee !== user.uid) {
-        const projectDoc = await getDoc(doc(db, "projects", task.projectId));
-        const projectTitle = projectDoc.exists()
-          ? projectDoc.data().title
-          : "Unknown Project";
-
-        await addDoc(collection(db, "notifications"), {
-          userId: assignee,
-          message: `You have been assigned to task "${title.trim()}" in project "${projectTitle}" by ${user.displayName || "Anonymous"}.`,
-          taskId: task.id,
-          projectId: task.projectId,
-          read: false,
-          createdAt: serverTimestamp(),
-          type: "assignment",
+      setIsSubmitting(true);
+      try {
+        await updateDoc(doc(db, "tasks", task.id), {
+          title: title.trim(),
+          description: description.trim(),
+          assignee: assignee || null,
+          priority,
+          dueDate: dueDate ? new Date(dueDate) : null,
+          updatedAt: serverTimestamp(),
         });
+
+        // Notify assignee if changed
+        if (assignee && assignee !== task.assignee && assignee !== user.uid) {
+          const projectDoc = await getDoc(doc(db, "projects", task.projectId));
+          const projectTitle = projectDoc.exists()
+            ? (projectDoc.data() as ProjectData).title
+            : "Unknown Project";
+
+          await addDoc(collection(db, "notifications"), {
+            userId: assignee,
+            message: `You have been assigned to task "${title.trim()}" in project "${projectTitle}" by ${user.displayName || "Anonymous"}.`,
+            taskId: task.id,
+            projectId: task.projectId,
+            read: false,
+            createdAt: serverTimestamp(),
+            type: "assignment",
+          });
+        }
+
+        setOpen(false);
+      } catch (err: unknown) {
+        setError(getFriendlyErrorMessage(err));
+        console.error("Error updating task:", err);
+      } finally {
+        setIsSubmitting(false);
       }
+    },
+    [
+      title,
+      description,
+      dueDate,
+      assignee,
+      priority,
+      user,
+      task.assignee,
+      task.id,
+      task.projectId,
+      setOpen,
+    ]
+  );
 
-      setOpen(false);
-    } catch (err: unknown) {
-      setError(getFriendlyErrorMessage(err));
-      console.error("Error updating task:", err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
+  // Handle task deletion
+  const handleDelete = useCallback(async () => {
     if (!user) {
       setError("No user is logged in.");
       return;
@@ -237,15 +294,16 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
     try {
       const projectDoc = await getDoc(doc(db, "projects", task.projectId));
       const projectTitle = projectDoc.exists()
-        ? projectDoc.data().title
+        ? (projectDoc.data() as ProjectData).title
         : "Unknown Project";
+      const projectData = projectDoc.data() as ProjectData;
 
       // Notify project members about deletion
-      const projectData = projectDoc.data();
       const memberUids = projectData?.members || [];
-      for (const memberId of memberUids) {
-        if (memberId !== user.uid) {
-          await addDoc(collection(db, "notifications"), {
+      const notifications = memberUids
+        .filter((memberId) => memberId !== user.uid)
+        .map((memberId) =>
+          addDoc(collection(db, "notifications"), {
             userId: memberId,
             message: `Task "${task.title}" in project "${projectTitle}" was deleted by ${user.displayName || "Anonymous"}.`,
             taskId: task.id,
@@ -253,10 +311,10 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
             read: false,
             createdAt: serverTimestamp(),
             type: "task_deleted",
-          });
-        }
-      }
+          })
+        );
 
+      await Promise.all(notifications);
       await deleteDoc(doc(db, "tasks", task.id));
       setOpen(false);
     } catch (err: unknown) {
@@ -265,29 +323,35 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
     } finally {
       setIsSubmitting(false);
     }
-  };
-  //DEPOIS DEVO VER ISSO (REMOVER OU MELHORAR)
+  }, [user, task.createdBy, task.id, task.projectId, task.title, setOpen]);
+
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin" />
+        <p className="ml-2">Loading user and project data...</p>
       </div>
     );
   }
 
-  if (error) {
+  // Only show full-screen error if the dialog is not open or user is loading
+  // Otherwise, errors within the form are displayed.
+  if (error && (!open || userLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-red-500">{error}</p>
+        <p className="text-red-500 text-center text-lg p-4">{error}</p>
       </div>
     );
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
+      <DialogContent
+        className="sm:max-w-[425px] p-6"
+        data-dnd-ignore="true" // <--- ADD THIS ATTRIBUTE HERE
+      >
         <DialogHeader>
-          <DialogTitle>Edit Task</DialogTitle>
+          <DialogTitle>Edit Task: {task.title}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -296,7 +360,10 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
               id="title"
               placeholder="Task Title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                console.log("Title input:", e.target.value); // Debug input
+                setTitle(e.target.value);
+              }}
               aria-invalid={!!titleError}
               aria-describedby={titleError ? "title-error" : undefined}
               disabled={isSubmitting}
@@ -313,7 +380,10 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
               id="description"
               placeholder="Description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                console.log("Description input:", e.target.value); // Debug input
+                setDescription(e.target.value);
+              }}
               disabled={isSubmitting}
             />
           </div>
@@ -323,7 +393,10 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
               id="dueDate"
               type="date"
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              onChange={(e) => {
+                console.log("Due date input:", e.target.value); // Debug input
+                setDueDate(e.target.value);
+              }}
               disabled={isSubmitting}
             />
             {dueDateError && (
@@ -335,8 +408,11 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
           <div className="space-y-2">
             <Label htmlFor="assignee">Assignee</Label>
             <Select
-              onValueChange={setAssignee}
+              onValueChange={(value) =>
+                setAssignee(value === "Unassigned" ? null : value)
+              }
               value={assignee || "Unassigned"}
+              disabled={isSubmitting} // Disable during submission
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select assignee" />
@@ -358,6 +434,7 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
                 setPriority(value)
               }
               value={priority}
+              disabled={isSubmitting} // Disable during submission
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select priority" />
@@ -375,7 +452,7 @@ export function EditTask({ task, open, setOpen }: EditTaskProps) {
               type="button"
               variant="destructive"
               onClick={handleDelete}
-              disabled={isSubmitting}
+              disabled={isSubmitting || user?.uid !== task.createdBy} // Disable delete if not creator or submitting
             >
               {isSubmitting ? (
                 <>
