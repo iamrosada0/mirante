@@ -199,7 +199,7 @@ export default function NewTask({
       });
 
       // Notify assignee if assigned
-      if (assignee && assignee !== user.uid) {
+      if (assignee) {
         const projectDoc = await getDoc(doc(db, "projects", projectId));
         const projectTitle = projectDoc.exists()
           ? projectDoc.data().title
