@@ -15,7 +15,6 @@ import { Task } from "@/types/task";
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { TaskAssignee } from "@/components/TaskAssignee";
 import {
   Select,
   SelectContent,
@@ -23,7 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EditTask } from "../EditTask";
+import { EditTask } from "../update/EditTask";
+import { TaskAssignee } from "../TaskAssignee";
 
 interface DraggableTaskProps {
   task: Task;

@@ -24,8 +24,8 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { Notifications } from "@/components/Notifications";
-import { DroppableColumn } from "./DroppableColumn";
 import { DraggableTask } from "./DraggableTask";
+import { DroppableColumn } from "./DroppableColumn";
 
 interface TaskBoardProps {
   projectId: string;

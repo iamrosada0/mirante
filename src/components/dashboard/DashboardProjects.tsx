@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ProjectCard } from "@/components/ProjectCard";
 import { Project } from "@/types";
+import { ProjectCard } from "../project/ProjectCard";
 
 interface Props {
   projects: Project[];

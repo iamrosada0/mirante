@@ -13,11 +13,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import { Button } from "../ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useNewProject } from "@/features/projects/hooks/useNewProject";
+import { Button } from "@/components/ui/button";
 
 export function NewProjectForm() {
   const {

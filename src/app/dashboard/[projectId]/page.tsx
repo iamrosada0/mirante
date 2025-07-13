@@ -4,13 +4,13 @@ import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { CommentSection } from "@/components/CommentSection";
 import { Notifications } from "@/components/Notifications";
-import { EditProject } from "@/components/EditProject";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
-import TaskBoard from "@/components/TaskBoard/TaskBoard";
+import TaskBoard from "@/components/task/taskBoard/TaskBoard";
 import { useProject } from "@/features/projects/hooks/useProject";
+import { EditProject } from "@/components/project/update/EditProject";
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;
