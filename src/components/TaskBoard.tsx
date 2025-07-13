@@ -165,6 +165,7 @@ function DraggableTask({ task }: DraggableTaskProps) {
           taskId={task.id}
           projectId={task.projectId}
           taskTitle={task.title}
+          currentAssignee={task?.assignee}
         />
       </CardContent>
       {currentUserId && currentUserId === task.createdBy && (
@@ -383,7 +384,7 @@ export default function TaskBoard({ projectId }: TaskBoardProps) {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <Notifications projectId={projectId} />
+      <Notifications />
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
         <h2 className="text-3xl font-bold text-gray-800">Project Tasks</h2>
         <Link href={`/dashboard/tasks/new?projectId=${projectId}`}>
