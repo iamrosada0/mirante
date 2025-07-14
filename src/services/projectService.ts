@@ -52,7 +52,6 @@ export const deleteProject = async (
     throw new Error("Projeto ou usuário inválido.");
   }
 
-  // Deletar tarefas associadas
   const tasksQuery = query(
     collection(db, "tasks"),
     where("projectId", "==", project.id)
@@ -63,7 +62,6 @@ export const deleteProject = async (
   );
   await Promise.all(deleteTasksPromises);
 
-  // Notificar membros
   const members = project.members || [];
   const deleteNotifications = members
     .filter((uid: string) => uid !== userId)
@@ -78,7 +76,6 @@ export const deleteProject = async (
     );
   await Promise.all(deleteNotifications);
 
-  // Deletar projeto
   await deleteDoc(doc(db, "projects", project.id));
   toast.success("Projeto excluído com sucesso.");
 };

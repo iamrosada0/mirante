@@ -7,5 +7,5 @@ export interface Comment {
   createdAt: Date | Timestamp;
   projectId: string;
   taskId?: string;
-  authorName?: string; // Adicionado para exibir o nome do autor
+  authorName?: string;
 }
