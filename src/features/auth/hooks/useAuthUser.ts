@@ -1,4 +1,3 @@
-// hooks/useAuthUser.ts
 import { useState, useEffect } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -11,7 +10,7 @@ interface UseAuthUserOptions {
   createdBy?: string;
   redirectToLogin?: () => void;
   redirectToRegister?: () => void;
-  autoRedirect?: boolean; // default true
+  autoRedirect?: boolean;
 }
 
 export function useAuthUser(options: UseAuthUserOptions = {}) {

@@ -6,8 +6,8 @@ import {
   query,
   where,
   onSnapshot,
-  Timestamp, // Add import
-  serverTimestamp, // Add import
+  Timestamp,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ interface Comment {
   content: string;
   createdBy: string;
   createdAt: Timestamp | Date;
-  projectId: string; // Add projectId to match Firestore data
+  projectId: string;
 }
 
 interface CommentSectionProps {

@@ -1,4 +1,3 @@
-// hooks/useProjectAccess.ts
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";

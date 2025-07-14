@@ -1,4 +1,3 @@
-// lib/firebaseErrors.ts
 export function getFriendlyErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const code = (error as { code?: string }).code;
