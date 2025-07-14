@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
 
-First, run the development server:
+# Mirante - Project Management App
+
+**Mirante** is a full-featured project management application developed as part of a practical coding challenge. Built with **Next.js** and **Firebase**, it offers a modern UI and powerful tools for team collaboration, task tracking, and project organization.
+
+## 📌 Description
+
+Mirante allows users to create, organize, collaborate on, and monitor the progress of projects. It supports task assignments, deadlines, status updates, and real-time collaboration — all in a clean and responsive interface.
+
+## 🚀 Features
+
+### 🔐 Authentication
+
+- Secure authentication using Firebase Auth
+- User registration, login, and logout
+
+### 🖥️ UI Pages
+
+- **Home/Dashboard**: View all your projects and progress summaries
+- **Project Details**: Overview with description, members, tasks, and deadlines
+- **Project Editor**: Create/edit projects (title, description, dates, members)
+- **Task Editor**: Create/edit tasks (title, description, responsible, status, due dates)
+- **Drag & Drop**: Reorder tasks and set priorities easily
+
+### ✅ Functional Highlights
+
+- Create and manage projects and tasks
+- Assign tasks with statuses: In Progress, Completed, Overdue
+- Real-time updates with Firestore
+- Notifications for deadlines and changes
+- Comments and task updates for collaboration
+- Role-based permissions (admin, member, viewer)
+
+## 🧰 Tech Stack
+
+- **Frontend**: React.js / Next.js
+- **Auth**: Firebase Authentication
+- **Database**: Firebase Firestore
+- **UI**: Tailwind CSS, Shadcn UI
+- **Testing**: React Testing Library, Jest
+
+## ⚙️ Getting Started
+
+### Prerequisites
+
+- Node.js >= 18
+- Firebase project with Auth & Firestore enabled
+
+### Clone the repository
+
+```bash
+git clone https://github.com/iamrosada0/mirante.git
+cd mirante
+npm install
+````
+
+### Configure Environment Variables
+
+Create a `.env.local` file and add your Firebase configuration:
+
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+```
+
+### Start the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit [http://localhost:3000](http://localhost:3000) to use the app locally.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🧪 Testing
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run test
+```
 
-## Learn More
+Run unit and integration tests using Jest and React Testing Library.
 
-To learn more about Next.js, take a look at the following resources:
+## 🚀 Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Recommended deployment options:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+* [Vercel](https://vercel.com/) – optimized for Next.js
+* Firebase Hosting
+* Netlify
 
-## Deploy on Vercel
+## 📇 Contact
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+* **Developer:** Luis De Água Rosada
+* **Repository:** [github.com/iamrosada0/mirante](https://github.com/iamrosada0/mirante)
+* **Challenge Contact:**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+  * [Aristides Chalo on LinkedIn](https://www.linkedin.com/in/aristideschalo)
+  * 📧 [aristides.chalo@statementmc.com](mailto:aristides.chalo@statementmc.com)
+
+---
+
+Feel free to fork, contribute, or suggest improvements!
+
+
+
